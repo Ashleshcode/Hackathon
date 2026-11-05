@@ -1,0 +1,311 @@
+html,
+body {
+  width: 390px;
+  min-height: 300px;
+  background: var(--tint);
+  font-size: 14px;
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.popup-brand {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.popup-brand strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.popup-brand .eyebrow {
+  font-size: 9.5px;
+}
+
+.mode-toggle {
+  display: flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--blue-chip);
+}
+
+.mode-toggle button {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--blue-text);
+  font: 500 12px var(--sans);
+  cursor: pointer;
+}
+
+.mode-toggle button[aria-pressed='true'] {
+  background: var(--blue-deep);
+  color: #fff;
+}
+
+.mode-toggle button:disabled {
+  cursor: default;
+}
+
+.popup-card {
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+}
+
+.popup-message {
+  margin-top: 6px;
+  color: var(--ink);
+}
+
+.popup-note {
+  text-align: center;
+}
+
+.page-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 8px 0 0;
+}
+
+.page-summary dt {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.page-summary dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sent-preview {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+.sent-preview summary {
+  color: var(--blue-text);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sent-preview dl {
+  margin: 6px 0 0;
+}
+
+.sent-preview dt {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.sent-preview dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.demo-panel {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--mock-bg);
+  color: var(--mock-ink);
+  font-size: 13px;
+}
+
+.demo-panel p {
+  margin-top: 4px;
+}
+
+.demo-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.demo-pill {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--mock-ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.live-panel {
+  background: var(--blue-soft);
+  color: var(--ink-body);
+}
+
+.live-panel label {
+  margin-top: 0;
+}
+
+.dataset-warning {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--mock-bg);
+  color: var(--mock-ink);
+}
+
+.popup .button {
+  justify-content: center;
+}
+
+.popup .button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.popup-primary {
+  width: 100%;
+  padding: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-actions .link-button {
+  align-self: center;
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  margin: 12px 0 8px;
+  border: 3px solid var(--blue-chip);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: popup-spin 0.9s linear infinite;
+}
+
+@keyframes popup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.analyzing-steps {
+  list-style: none;
+  color: var(--ink-body);
+}
+
+.media-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.media-result .ring {
+  width: 86px;
+  height: 86px;
+}
+
+.media-result .ring-value {
+  font-size: 18px;
+}
+
+.media-result .ring-value.is-empty {
+  font-size: 11px;
+}
+
+.media-result .ring-label {
+  font-size: 9.5px;
+}
+
+.media-result p {
+  overflow-wrap: anywhere;
+}
+
+.result-title {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.related-count {
+  margin-top: 6px;
+  color: var(--ink);
+}
+
+.related-count strong {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.signal-list {
+  margin-top: 4px;
+  list-style: none;
+  color: var(--ink);
+}
+
+.popup .evidence-list {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.popup-limitations {
+  padding-left: 16px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.capture-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.capture-report {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

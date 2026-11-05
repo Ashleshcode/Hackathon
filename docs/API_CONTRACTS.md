@@ -1,30 +1,40 @@
 # Veritas AI — API Contracts
 
-**Status:** Revised on 2026-11-05 for the Chrome extension architecture. These routes are not implemented. No platform connector has been verified.
+**Status:** Campaign X sync and `POST /api/youtube/context` are implemented and covered by mocked tests. No live X API or YouTube Data API call has been verified from this repository. Sections 2 through 4 and section 6, except `GET /health`, are still not implemented. Do not mark `verified` until a real call from this codebase has been recorded.
 
-Any change must be agreed by all three members before implementation.
+`docs/API_CONTRACTS.md` replaces the earlier Bluesky and Mastodon monitor draft. The extension must follow this document.
 
-Base path: `/api/v1`
+The extension calls this local backend only. It does not call `api.x.com`, `www.googleapis.com`, `x.com`, or `youtube.com` for data collection. Platform credentials are read from the backend environment:
 
-JSON responses use `application/json`. The only multipart route is the optional developer testing upload in section 7. The extension must not call that route.
+- `X_BEARER_TOKEN`
+- `YOUTUBE_API_KEY`
 
-The extension calls this backend. It does not call Bluesky, Mastodon, X, Reddit, Instagram, or Facebook directly, and it does not scrape pages.
+Those values must never appear in `extension/`, `frontend/`, source committed to Git, or a response body.
 
 ## Shared conventions
 
-- Use stable prefixed IDs. Do not use array positions as identifiers.
-- Timestamps are ISO-8601 with a timezone. Store UTC internally.
-- Allowed `prediction` values: `real`, `fake`, `uncertain`, `unsupported`.
-- A missing face produces `unsupported` or `uncertain`, not `real`.
-- `fake_score` is a raw model score, not a calibrated probability. Use `null` when there is no score.
-- If inference or a platform fetch fails, return an error or an explicit failure status. Do not invent a score, post, account, or alert.
-- `implementation_status` for a connector is one of `not_implemented`, `not_verified`, `verified`.
-- `not_verified` means code exists but this team has not completed a successful live call. Do not label a connector `verified` until that call has been recorded.
-- Initial connector scope is `bluesky` and `mastodon`. `x`, `reddit`, `instagram`, and `facebook` stay `not_implemented` unless an official authorized API client is added. Scraping is out of contract.
-- Do not commit uploaded media, checkpoints, credentials, `.env`, or large datasets.
+- JSON uses `application/json`. There is no product upload route.
+- IDs returned by X or YouTube are kept as the platform IDs. Internal investigation IDs use a stable prefix.
+- Timestamps are ISO-8601 with a timezone.
+- `implementation_status` is `not_implemented`, `not_verified`, or `verified`. This repository is still `not_implemented`. Do not mark `verified` until a real call from this codebase has been recorded.
+- Allowed detector `prediction` values, once a model exists: `real`, `fake`, `uncertain`, `unsupported`.
+- `fake_score` is a raw model score, or `null`. It is not a calibrated probability.
+- Do not invent posts, authors, variant URLs, metadata, or scores when an API call fails or a field is absent.
+- Do not scrape `x.com`. Do not use an extension content script on X.
+- Do not download YouTube audiovisual content, use `tabCapture`, or aggregate YouTube data for videos the user did not submit.
 - Validation errors name the field and the reason.
 
-## 1. Health check
+Official upstream shapes this contract maps, without claiming they were called here:
+
+- X API v2 recent search: `GET /2/tweets/search/recent`
+- X API v2 post lookup: `GET /2/tweets/:id`
+- X expansions used for this contract: `author_id`, `referenced_tweets.id`, `attachments.media_keys`
+- X fields used for this contract: tweet `created_at`, `author_id`, `conversation_id`, `text`, `referenced_tweets`, `attachments`; user `username`, `name`; media `type`, `duration_ms`, `width`, `height`, `preview_image_url`, `variants`
+- YouTube Data API v3: `videos.list` with `part=snippet,contentDetails` and a single `id`
+
+`referenced_tweets.type` maps as follows: `retweeted` to `reposted`, `quoted` to `quoted`, `replied_to` to `replied_to`.
+
+## 1. Health
 
 ### `GET /health`
 
@@ -32,310 +42,228 @@ The extension calls this backend. It does not call Bluesky, Mastodon, X, Reddit,
 {
   "status": "ok",
   "service": "veritas-ai-api",
-  "version": "0.2.0"
+  "version": "0.3.0"
 }
 ```
 
-## 2. Platform monitoring
+## 2. X recent search
 
-A monitor stores the analyst's selected platforms and topics. A refresh asks the backend connectors for matching public posts. It does not mean those connectors already work.
+### `POST /api/x/search`
 
-### `GET /api/v1/platforms`
-
-```json
-{
-  "platforms": [
-    {
-      "platform": "bluesky",
-      "access": "public_api",
-      "implementation_status": "not_implemented",
-      "last_verified_at": null,
-      "notes": "Planned initial connector. No live fetch has been verified."
-    },
-    {
-      "platform": "mastodon",
-      "access": "public_api",
-      "implementation_status": "not_implemented",
-      "last_verified_at": null,
-      "notes": "Requires an instance base URL. No live fetch has been verified."
-    }
-  ]
-}
-```
-
-Include `x`, `reddit`, `instagram`, and `facebook` with `"access": "official_authorized_api"` and `"implementation_status": "not_implemented"`. Do not return posts for them.
-
-### `POST /api/v1/monitors`
+This standalone route is not implemented. Campaign ingestion uses section 11 instead. The extension does not call either route yet. The request below remains the future standalone shape. The extension would send the analyst's query, not a scraped page.
 
 ```json
 {
-  "name": "Topic watch",
-  "platforms": ["bluesky", "mastodon"],
-  "topics": ["synthetic media"],
-  "mastodon_instance": "https://example.invalid",
-  "limit_per_platform": 20
+  "query": "synthetic media",
+  "max_results": 10,
+  "start_time": null
 }
 ```
 
 Rules:
 
-- `platforms` and `topics` are required. `topics` must contain at least one non-empty string.
-- `limit_per_platform` defaults to 20 and must not exceed 50 for the MVP.
-- `mastodon_instance` is required when `mastodon` is selected. Store the base URL; do not assume one global Mastodon server.
-- Reject unknown platform names. Accepting `x`, `reddit`, `instagram`, or `facebook` is allowed only so the monitor can record intent. A refresh must not scrape those platforms.
-
-Response:
+- `query` is required and must be a non-empty string acceptable to X recent search.
+- `max_results` defaults to 10. The backend must stay inside the official recent-search bounds, currently 10 through 100.
+- `start_time`, when present, is ISO-8601.
+- Store this query only because the analyst submitted it. Do not record other browser activity.
 
 ```json
 {
-  "monitor_id": "mon_0001",
-  "name": "Topic watch",
-  "platforms": ["bluesky", "mastodon"],
-  "topics": ["synthetic media"],
-  "status": "configured",
-  "created_at": "2026-11-05T13:30:00+05:30"
-}
-```
-
-### `GET /api/v1/monitors`
-
-### `GET /api/v1/monitors/{monitor_id}`
-
-Return the stored monitor plus the latest refresh summary. `latest_refresh` is `null` before the first refresh.
-
-### `POST /api/v1/monitors/{monitor_id}/refresh`
-
-No request body. The backend reads the stored monitor and calls only the connectors that are implemented. Each platform result is reported separately.
-
-```json
-{
-  "monitor_id": "mon_0001",
-  "refresh_id": "ref_0001",
-  "status": "completed",
-  "platform_results": [
-    {
-      "platform": "bluesky",
-      "implementation_status": "not_implemented",
-      "fetch_status": "skipped",
-      "posts_retrieved": 0,
-      "error": null
-    }
-  ],
-  "posts_retrieved": 0,
-  "started_at": "2026-11-05T13:31:00+05:30",
-  "finished_at": "2026-11-05T13:31:01+05:30"
-}
-```
-
-`fetch_status` is `skipped`, `succeeded`, or `failed`. `posts_retrieved` counts only posts returned by the connector. A skipped or failed platform contributes zero posts.
-
-### `GET /api/v1/monitors/{monitor_id}/alerts`
-
-Alerts are review prompts derived from stored media jobs or graph signals. An alert is not an accusation.
-
-```json
-{
-  "monitor_id": "mon_0001",
-  "alerts": [
-    {
-      "alert_id": "alt_0001",
-      "severity": "review",
-      "reason": "media_analysis_completed",
-      "post_id": "post_0001",
-      "media_job_id": "job_0001",
-      "graph_edge_id": null,
-      "summary": "A stored detector result is ready for human review.",
-      "created_at": "2026-11-05T13:40:00+05:30"
-    }
-  ]
-}
-```
-
-Allowed `severity`: `info`, `review`. Allowed `reason`: `media_analysis_completed`, `media_unsupported`, `graph_relationship_found`, `connector_unavailable`.
-
-## 3. Normalized social posts
-
-Every connector maps its own response into this shape before storage or graph construction. Platform-specific JSON is not sent to the extension as the primary record.
-
-```json
-{
-  "post_id": "post_0001",
-  "monitor_id": "mon_0001",
-  "platform": "bluesky",
-  "platform_post_id": "platform-native-id",
-  "instance": null,
-  "account_id": "account-native-id",
-  "account_handle": "example.invalid",
-  "timestamp": "2026-11-05T10:00:00Z",
-  "text": "Post text supplied by the platform API.",
-  "post_url": "https://example.invalid/post/1",
-  "topics": ["synthetic media"],
-  "retrieval": {
-    "method": "official_public_api",
-    "connector": "bluesky",
-    "refresh_id": "ref_0001",
-    "retrieved_at": "2026-11-05T13:31:00+05:30",
-    "implementation_status": "not_verified"
+  "query_id": "xq_0001",
+  "implementation_status": "not_implemented",
+  "source": {
+    "platform": "x",
+    "api": "x_api_v2",
+    "endpoint": "GET /2/tweets/search/recent"
   },
-  "media": [
-    {
-      "media_id": "med_0001",
-      "media_type": "image",
-      "mime_type": "image/jpeg",
-      "source_url": "https://example.invalid/media/1.jpg"
-    }
-  ],
-  "provenance_label": "platform_api"
-}
-```
-
-Rules:
-
-- Required: `post_id`, `monitor_id`, `platform`, `platform_post_id`, `account_id`, `timestamp`, `retrieval`, `provenance_label`.
-- `text` may be empty. `media` may be an empty array.
-- `instance` is the Mastodon base URL, and `null` for Bluesky.
-- `provenance_label` is `platform_api` for connector results. Fixture records use `synthetic_demo` or `curated_public_sample` and must not use `platform_api`.
-- `retrieval.method` is `official_public_api` or `official_authorized_api`. There is no scraping method.
-- Preserve the platform's post ID, account ID, timestamp, URL, and media URL.
-
-### `GET /api/v1/monitors/{monitor_id}/posts`
-
-```json
-{
-  "monitor_id": "mon_0001",
+  "result_count": 0,
   "posts": [],
-  "count": 0
+  "next_token": null,
+  "warnings": []
 }
 ```
 
-`posts` contains normalized post objects. An empty list is valid when no connector has returned posts.
+Each item in `posts` uses the normalized X post in section 7. Until the connector is implemented, return `implementation_status: "not_implemented"`, `result_count: 0`, and `posts: []`. Do not fill the array with fixtures.
 
-## 4. Media-analysis jobs
+## 3. X post lookup
 
-The product path analyses media already attached to a stored post. The client supplies a `media_id`. The backend resolves the stored official `source_url`. The product path does not accept an arbitrary URL or a file upload.
+### `GET /api/x/posts/{post_id}`
 
-### `POST /api/v1/media-jobs`
-
-```json
-{
-  "media_id": "med_0001"
-}
-```
-
-Response:
+`post_id` is the official X post ID. The backend calls official post lookup and requests author, timestamp, referenced posts, and media expansions.
 
 ```json
 {
-  "job_id": "job_0001",
-  "media_id": "med_0001",
-  "post_id": "post_0001",
-  "monitor_id": "mon_0001",
-  "media_type": "image",
-  "status": "queued",
-  "result": null,
-  "created_at": "2026-11-05T13:35:00+05:30"
-}
-```
-
-`status` is `queued`, `running`, `completed`, `failed`, or `unsupported`.
-
-### `GET /api/v1/media-jobs/{job_id}`
-
-While the job is unfinished, `result` stays `null`. A completed image result:
-
-```json
-{
-  "job_id": "job_0001",
-  "media_id": "med_0001",
-  "post_id": "post_0001",
-  "monitor_id": "mon_0001",
-  "media_type": "image",
-  "status": "completed",
-  "result": {
-    "model": {
-      "name": "record-at-runtime",
-      "checkpoint_dataset": "record-at-runtime",
-      "version": "record-at-runtime"
-    },
-    "face_count": 1,
-    "prediction": "uncertain",
-    "fake_score": null,
-    "score_semantics": "raw_model_score_not_calibrated_probability",
-    "warnings": []
+  "implementation_status": "not_implemented",
+  "source": {
+    "platform": "x",
+    "api": "x_api_v2",
+    "endpoint": "GET /2/tweets/:id"
   },
-  "created_at": "2026-11-05T13:35:00+05:30",
-  "finished_at": "2026-11-05T13:35:05+05:30"
+  "post": null,
+  "warnings": []
 }
 ```
 
-A completed video result uses the same job envelope. Its `result` contains:
+When implemented, `post` is one normalized X post. A missing post is HTTP 404. An unauthorized or rate-limited API response is returned as an error and does not become a synthetic post.
 
-- `frames_sampled`
-- `frames_with_faces`
-- `frame_results`: `timestamp_seconds`, `face_detected`, `prediction`, `fake_score`
-- `aggregate_prediction`
-- `aggregate_fake_score`
-- `aggregation_method`
-- `score_semantics`
+## 4. Media analysis
+
+### `POST /api/media/analyze`
+
+Creates an analysis job for one piece of X media already returned by section 2 or section 3. The client identifies the media. It does not supply a download URL.
+
+```json
+{
+  "post_id": "1234567890",
+  "media_key": "13_1234567890"
+}
+```
+
+The backend loads the stored official media object for that pair. It resolves a video variant only from `variants` included in the X API response. It chooses the variant according to a documented rule, starting with the highest `bit_rate` MP4 that the response actually contained. If no permitted variant URL is present, it does not scrape `x.com` and does not guess a URL.
+
+```json
+{
+  "job_id": "job_0001",
+  "post_id": "1234567890",
+  "media_key": "13_1234567890",
+  "platform": "x",
+  "media_type": "video",
+  "variant_access": "absent",
+  "status": "unavailable",
+  "status_reason": "x_api_did_not_provide_a_permitted_variant",
+  "result": null,
+  "created_at": "2026-11-05T14:30:00+05:30"
+}
+```
+
+`variant_access` is `present` or `absent`. The variant URL is backend-only and must not be copied into this response or into extension storage.
+
+`status` is `queued`, `running`, `completed`, `failed`, `unsupported`, or `unavailable`.
+
+Reject the request with HTTP 422 when `platform` would be YouTube or the target is a YouTube URL. The error code is `youtube_audiovisual_analysis_not_permitted`. YouTube context never creates this job.
+
+A completed image or video `result` uses:
+
+- `model.name`, `model.checkpoint_dataset`, `model.version`
+- `prediction`
+- `fake_score`
+- `score_semantics`: `raw_model_score_not_calibrated_probability`
 - `warnings`
 
-Video rules:
+Video results also include `frames_sampled`, `frames_with_faces`, `frame_results` (`timestamp_seconds`, `face_detected`, `prediction`, `fake_score`), `aggregate_prediction`, `aggregate_fake_score`, and `aggregation_method`. Sampling is capped at 20 frames. No usable face produces `unsupported` or `uncertain` and a null score. One suspicious frame does not by itself label the whole video fake.
 
-- Preserve frame timestamps.
-- Sample at most 20 frames.
-- If no sampled frame has a usable face, set `aggregate_prediction` to `unsupported` or `uncertain` and explain why in `warnings`.
-- Do not mark the whole video fake because of one frame.
-- Record the aggregation method and the number of usable frames.
+`POST /api/media/analyze` is implemented for media already stored by the X sync. The body accepts only `post_id` and `media_key`. A video variant counts as present when the stored X payload contains a `video/mp4` variant. The variant URL is not returned and is not fetched. Until a later retrieval step links a local file, the job status is `unavailable` and `result` is null. When a local file is linked, the existing shared detector scores it. Per-frame thresholds are unchanged. New video decisions use `video_aggregation_v2`, described in section 10. A missing face is reported as prediction `unsupported` with a null score and `detector_status` `no_face`. This route is separate from the direct byte routes in section 10.
 
-Failed jobs return `status: "failed"`, `result: null`, and an `error` string. They do not include a fabricated score.
+### `GET /api/media/jobs/{job_id}`
 
-## 5. Campaign graph results
+Returns the same job object. This read route supports the side panel. It is not a second way to submit media.
 
-The graph is built from normalized posts stored for one monitor. It is not built from a hard-coded drawing.
+## 5. YouTube context
 
-### `POST /api/v1/monitors/{monitor_id}/graph`
+### `POST /api/youtube/context`
 
-No request body. Rebuild the graph from the current stored posts.
-
-### `GET /api/v1/monitors/{monitor_id}/graph`
+User-initiated context for one video. The extension may send this only after the analyst explicitly requests an investigation of the current watch page.
 
 ```json
 {
-  "monitor_id": "mon_0001",
-  "graph_id": "graph_0001",
-  "provenance_labels": ["platform_api"],
-  "nodes": [
-    {
-      "id": "account:bluesky:account-native-id",
-      "type": "account",
-      "label": "example.invalid",
-      "platform": "bluesky"
-    },
-    {
-      "id": "post:post_0001",
-      "type": "post",
-      "label": "post_0001",
-      "platform": "bluesky",
-      "timestamp": "2026-11-05T10:00:00Z"
-    }
-  ],
-  "edges": [
-    {
-      "id": "edge_0001",
-      "source": "account:bluesky:account-native-id",
-      "target": "post:post_0001",
-      "type": "published",
-      "signals": []
-    }
-  ],
-  "clusters": [],
-  "methodology": "Describe the signals and thresholds that were actually used."
+  "video_url": "https://www.youtube.com/watch?v=aaaaaaaaaaa",
+  "video_id": null
 }
 ```
 
-Edge types: `published`, `similar_text`, `similar_media`, `shared_url`, `temporally_coordinated`.
+Rules:
 
-Every similarity or coordination edge includes evidence:
+- Provide `video_url` or `video_id`. A watch URL, short URL, or embed URL may be parsed to one 11-character video ID.
+- Reject playlist pages, channel pages, search pages, and the YouTube home page.
+- Call `videos.list` for that one ID only.
+- Do not call YouTube search across unrelated videos or channels.
+- Do not download the stream, storyboard, caption track for analysis, or player JavaScript.
+- After metadata returns, the backend may run an official X recent search for the exact watch URL. That search is the external reference lookup. Its X posts use section 7.
+- Do not write this request to a browsing-history table. The returned context may be attached to an investigation only when the analyst creates one.
+
+```json
+{
+  "context_id": "yt_0001",
+  "implementation_status": "not_implemented",
+  "video_id": "aaaaaaaaaaa",
+  "metadata": null,
+  "audiovisual_analysis": "not_performed",
+  "audiovisual_analysis_reason": "YouTube audiovisual content is not downloaded or analysed.",
+  "external_references": {
+    "platform": "x",
+    "query": "url:\"https://www.youtube.com/watch?v=aaaaaaaaaaa\"",
+    "implementation_status": "not_implemented",
+    "posts": []
+  },
+  "warnings": []
+}
+```
+
+When metadata is available, `metadata` contains only permitted single-video fields: `title`, `channel_title`, `channel_id`, `published_at`, `duration`, and `description`. It is context, not a detector result.
+
+## 6. Investigations
+
+### `POST /api/investigations`
+
+Creates an investigation from records the analyst already requested. This route is the source of the IDs used by the two GET routes below.
+
+```json
+{
+  "x_query_id": "xq_0001",
+  "x_post_ids": ["1234567890"],
+  "media_job_ids": ["job_0001"],
+  "youtube_context_id": null
+}
+```
+
+At least one of `x_query_id`, a non-empty `x_post_ids`, or `youtube_context_id` is required. Unknown IDs are a validation error. The response:
+
+```json
+{
+  "investigation_id": "inv_0001",
+  "status": "completed",
+  "created_at": "2026-11-05T14:40:00+05:30"
+}
+```
+
+`status` means the stored record was assembled. It does not mean a platform call was verified.
+
+### `GET /api/investigations/{id}`
+
+```json
+{
+  "investigation_id": "inv_0001",
+  "status": "completed",
+  "x_posts": [],
+  "media_jobs": [],
+  "youtube_context": null,
+  "uncertainties": [],
+  "recommended_actions": [
+    "Review the stored official records before drawing a conclusion."
+  ],
+  "created_at": "2026-11-05T14:40:00+05:30"
+}
+```
+
+`x_posts` and `media_jobs` are copies of stored records. `youtube_context`, when present, must still say `audiovisual_analysis: "not_performed"`. `uncertainties` lists missing variants, unimplemented connectors, and media the detector could not score. The report must not add posts or scores that were not stored.
+
+### `GET /api/investigations/{id}/graph`
+
+```json
+{
+  "investigation_id": "inv_0001",
+  "graph_id": "graph_0001",
+  "nodes": [],
+  "edges": [],
+  "methodology": "Official X referenced_tweets become reposted, quoted, and replied_to edges. A YouTube node appears only for the one submitted video and has no detector score. Additional similarity edges must include their signal evidence."
+}
+```
+
+Node types: `x_account`, `x_post`, `youtube_video`.
+
+Edge types: `published`, `reposted`, `quoted`, `replied_to`, `references_youtube_url`, `similar_text`, `similar_media`.
+
+Official relationship edges can use an empty `signals` array because the X payload is the evidence, and the edge `type` must be one of the official mapped types. Similarity edges must include:
 
 ```json
 {
@@ -346,72 +274,201 @@ Every similarity or coordination edge includes evidence:
 }
 ```
 
-Rules:
+A YouTube node must not contain `prediction` or `fake_score`. An empty graph is valid.
 
-- An edge is an observed relationship, not proof of maliciousness.
-- Do not return an opaque coordination score unless the contributing signals are also present.
-- The extension must show `provenance_labels` and state that clusters need human review.
-- An empty graph is valid when the monitor has no stored posts.
-
-## 6. Investigation reports
-
-### `POST /api/v1/investigations`
+## 7. Normalized X post
 
 ```json
 {
-  "monitor_id": "mon_0001",
-  "media_job_ids": ["job_0001"]
-}
-```
-
-`media_job_ids` may be empty. The report then includes dissemination findings and explicitly lists the missing media analysis. It must not invent detector results.
-
-```json
-{
-  "investigation_id": "inv_0001",
-  "report_id": "rep_0001",
-  "monitor_id": "mon_0001",
-  "status": "completed"
-}
-```
-
-### `GET /api/v1/reports/{report_id}`
-
-```json
-{
-  "report_id": "rep_0001",
-  "investigation_id": "inv_0001",
-  "monitor_id": "mon_0001",
-  "media_findings": [],
-  "dissemination_findings": [],
-  "alerts": [],
-  "uncertainties": [],
-  "recommended_actions": [
-    "Review the stored posts and detector outputs before drawing a conclusion."
+  "post_id": "1234567890",
+  "platform": "x",
+  "text": "Text returned by X API v2.",
+  "created_at": "2026-11-05T09:00:00Z",
+  "author": {
+    "author_id": "9876543210",
+    "username": "example",
+    "name": "Example"
+  },
+  "conversation_id": "1234567890",
+  "relationships": [
+    {
+      "type": "replied_to",
+      "target_post_id": "1234567000"
+    }
   ],
-  "provenance_labels": [],
-  "generated_at": "2026-11-05T13:45:00+05:30"
+  "media": [
+    {
+      "media_key": "13_1234567890",
+      "type": "video",
+      "duration_ms": 10000,
+      "width": 1280,
+      "height": 720,
+      "preview_image_url": null,
+      "variant_access": "absent"
+    }
+  ],
+  "provenance": {
+    "api": "x_api_v2",
+    "endpoint": "recent_search",
+    "retrieved_at": "2026-11-05T14:30:00+05:30",
+    "implementation_status": "not_verified"
+  }
 }
 ```
 
-`media_findings` copy stored job results, model identity, and limitations. `dissemination_findings` copy stored graph signals. `recommended_actions` are human-review steps only. The report must not add posts, accounts, scores, or claims that are absent from stored records.
+`relationships` contains only referenced tweets present in the official payload. `variant_access` reports whether a permitted variant URL was resolved. The URL itself is omitted.
 
-## 7. Developer testing interface
+## 8. Developer testing
 
-These routes are for local development only. The extension popup and side panel must not call them, and the demo must not depend on them.
+`POST /api/v1/dev/media-jobs/upload` from the previous draft is not a product route. Do not add an upload control to the popup or side panel. A local fixture, if a member needs one before API credentials work, must be labelled `synthetic_demo` and must not be returned as an X or YouTube API result.
 
-### `POST /api/v1/dev/media-jobs/upload`
+## 9. Coordination graph already in the API
 
-`multipart/form-data`
+These routes come from the integrated campaign module. They do not implement section 6. `GET /api/investigations/{id}/graph` is still the future directional graph and is not registered.
 
-- `file`: required image or MP4
-- `media_type`: `image` or `video`
-- `provenance_label`: required, `synthetic_demo` or `curated_public_sample`
+| Route | What it does now |
+|---|---|
+| `POST /api/campaigns/import` | Imports a CSV or JSON file into SQLite and builds the similarity graph. |
+| `GET /api/campaigns` | Lists imported campaigns. Checked copies are omitted. |
+| `GET /api/campaigns/{campaign_id}` | Returns one stored campaign. |
+| `GET /api/campaigns/{campaign_id}/graph` | Returns the account-similarity graph for that campaign. |
+| `POST /api/campaigns/{campaign_id}/check-post` | Compares one submitted post with that campaign without changing the original import. |
 
-Response: the same media-job object as section 4, with `post_id` and `monitor_id` set to `null`.
+The graph algorithm is `evidence_signals_v1`. An edge can carry `same_media_hash`, `similar_caption` (TF-IDF cosine at least 0.6), `shared_url`, and `close_posting_time` only when another content signal is already present and the posts are within 10 minutes. The caption threshold here is 0.6. The 0.85 example in section 6 belongs to the future investigation graph, not to this engine.
 
-### `POST /api/v1/dev/posts/import`
+Hashes are used only when the imported record already has `media_hash`. The service does not compute or invent one. `backend/data/synthetic_demo_data.csv` is fictional and must stay labelled `synthetic_demo_data`.
 
-Accepts a JSON array of normalized posts whose `provenance_label` is `synthetic_demo` or `curated_public_sample`. Reject any item labelled `platform_api`. This fixture exists so the graph can be tested before a connector is verified.
+Campaigns, accounts, posts, media hashes that were already on an imported record, coordination-graph edges, and analysis-job rows are stored in `backend/data/veritas.db`. Importing the same file again creates a new campaign id. Saving the same campaign id twice is rejected, and the original row stays as it was. A missing media hash is stored as null. It is not invented.
 
-Enforce file type, size limits, and safe temporary-file handling on the upload route.
+Restarting the API does not drop these rows. That is not background monitoring, and it is not the directional propagation graph. Direct byte analysis creates an analysis job through the routes in section 10. A stored job keeps the detector result it received and does not invent a score. Section 11 stores X accounts, posts, media metadata, and explicit relationships without creating an analysis job and without changing `graph_edges`.
+
+Routes the imported UI calls that are not implemented on this app:
+
+- `POST /api/extension/analyze`
+- `GET /api/overview`
+- Every route in sections 2 through 6 except `GET /health`
+
+The dashboard does not call `POST /api/analyze/image`, `POST /api/analyze/video`, or `GET /api/reports/{report_id}`. The extension calls the video route and the report route only after the user clicks "Analyse this video". The request contract is unchanged and is described in section 10.
+
+## 10. Direct media analysis
+
+`POST /api/analyze/image` and `POST /api/analyze/video` accept one multipart field, `file`. They do not accept a remote URL. The original filename is not used as a path and is not returned. The extension may POST a user-initiated recording of the visible tab to the existing video route. That recording is rendered tab video, not the platform's original file, and the request still has exactly one `file` field.
+
+A caller receives HTTP 200 only when the job status is `completed`. That means the shared detector finished and the result was stored. `completed` is not a claim that the media is fake.
+
+```json
+{
+  "report_id": "rpt_abc",
+  "job_id": "rpt_abc",
+  "status": "completed",
+  "status_reason": null,
+  "media_type": "image",
+  "media_asset_id": "ma_abc",
+  "byte_size": 1234,
+  "sha256": "hex sha256 of the file bytes",
+  "created_at": "2026-11-05T10:00:00.000000Z",
+  "completed_at": "2026-11-05T10:00:00.000000Z",
+  "result": {
+    "status": "scored",
+    "media_type": "image",
+    "prediction": "uncertain",
+    "fake_score": 0.5,
+    "score_semantics": "raw_model_score_not_calibrated_probability",
+    "model": {"name": "ms_eff_gcvit_b0", "checkpoint_dataset": "ff++"},
+    "error_code": null,
+    "error_message": null,
+    "warnings": []
+  }
+}
+```
+
+`prediction` is `real`, `fake`, `uncertain`, or null. A score of 0.5 stays `uncertain`. `no_face` is a completed detector result with `fake_score` and `prediction` null. Video results add `frames_sampled`, `frames_scored`, `frames_with_faces`, `aggregation_method`, `aggregate_prediction`, `aggregate_fake_score`, and `frame_results` (`timestamp_seconds`, `face_detected`, `status`, `prediction`, `fake_score`). New analyses add `aggregation_policy` `video_aggregation_v2` and `aggregation_evidence`. A stored report is returned as it was saved. Older reports keep `video_aggregation_v1` when that version was stored with them, and are not recalculated. V2 labels a video fake only when the median is at least 0.8, temporal evidence is sufficient, enough scored frames pass the documented quality floors, and the high scores are not only low-quality detections. Temporal evidence is two bursts separated by more than 1 second, or one burst lasting more than 2 seconds. Real still requires every scored frame to be at or below 0.2. Frame results may also include detector confidence, face box size, face area ratio, crop size, quality warnings, and burst id. Per-frame scores are unchanged.
+
+`sha256` is a hash of the stored bytes. It is not the perceptual `media_hash` used by the coordination graph.
+
+Other responses:
+
+| Case | HTTP | `status` |
+|---|---|---|
+| Empty file | 422 | `failed`, no job row |
+| Undecodable file | 422 | `failed`, and `GET` returns 409 |
+| Detector exception | 422 | `failed`, no exception text |
+| Unsupported type | 415 | `failed`, no job row |
+| File over the route limit | 413 | `failed`, no job row |
+| Database write failure | 500 | no completed job and the stored file is removed |
+| Unknown report | 404 | none |
+
+`GET /api/reports/{report_id}` returns the stored object only when `status` is `completed`. A stored failed job returns 409 with that job. Nothing on this route is a sample score.
+
+Image files are limited to 20 MB and video files to 100 MB. Bytes are stored under `backend/data/media/` with a server-chosen name. The response does not include that path.
+
+## 11. Campaign X sync
+
+`POST /api/campaigns/{campaign_id}/sync/x` calls `GET https://api.x.com/2/tweets/search/recent` for one existing campaign. The bearer token is `X_BEARER_TOKEN` on the backend. If it is missing, the response is HTTP 503 and `code` is `x_connector_not_configured`. The rest of the API still starts.
+
+Recent search only returns public posts from the preceding seven days. A `start_time` older than that window is rejected locally. This route does not run on a schedule, does not scrape `x.com`, and does not download media.
+
+```json
+{
+  "query": "synthetic media",
+  "max_results": 10,
+  "max_pages": 1,
+  "max_posts": 10,
+  "start_time": null
+}
+```
+
+`query` is stored on the campaign's X source. A later call can omit it and reuse the stored query. `max_results` is the page size, from 10 to 100, and defaults to 10. `max_pages` defaults to 5 and cannot exceed 10. `max_posts` defaults to 100 and cannot exceed 500. Each page is one billed X API request. The caps above are the defaults from `.env.example`.
+
+HTTP 200 means the rows that were fetched were saved. `complete` is true only when X did not offer another page and the configured cap was not reached. A capped sync is `status: "partial"` and `complete: false`.
+
+```json
+{
+  "campaign_id": "Cabc",
+  "status": "completed",
+  "complete": true,
+  "query": "synthetic media",
+  "search_window": "preceding_seven_days",
+  "source": {
+    "platform": "x",
+    "api": "x_api_v2",
+    "endpoint": "https://api.x.com/2/tweets/search/recent"
+  },
+  "posts_fetched": 1,
+  "posts_inserted": 1,
+  "posts_already_known": 0,
+  "referenced_posts_resolved": 0,
+  "referenced_posts_unresolved": 0,
+  "accounts_inserted": 1,
+  "accounts_updated": 0,
+  "media_references": 0,
+  "relationships_inserted": 0,
+  "relationships_already_known": 0,
+  "pages_retrieved": 1,
+  "more_pages_available": false,
+  "stopped_by_limit": false,
+  "media": [],
+  "relationships": [],
+  "analysis": "not_performed",
+  "coordination_graph": "unchanged",
+  "synced_at": "2026-11-05T10:00:00.000000Z"
+}
+```
+
+`relationships` uses the original post as `source_post_id` and the repost, quote, or reply as `referencing_post_id`. X `retweeted` is stored as `reposted`, `quoted` stays `quoted`, and `replied_to` stays `replied_to`. Replies are conversation references, not propagation. These rows go in `post_relationships`. They are not added to `graph_edges`, which remains the inferred account-similarity graph. A referenced id with no expanded post is stored as a relationship and does not receive invented text.
+
+`media` lists keys and types only. `variant_access` says whether X included variants. The variant URL is stored for a later retrieval step and is not returned. `analysed` is false. No analysis job is created.
+
+`GET /api/campaigns/{campaign_id}/x` returns the stored query, the latest saved sync, accounts, posts, media metadata without variant URLs, and the explicit relationships. Unknown campaigns are HTTP 404.
+
+| X result | HTTP | `code` |
+|---|---|---|
+| No token | 503 | `x_connector_not_configured` |
+| Authentication failed | 401 | `x_authentication_failed` |
+| Access denied | 403 | `x_permission_denied` |
+| Credits exhausted | 402 | `x_credits_exhausted` |
+| Rate limit | 429 | `x_rate_limited` |
+| Network or X server failure after retries | 502 | `x_network_error` or `x_server_error` |
+| Database transaction failure | 500 | no completed sync row |
+
+Permanent 4xx responses are not retried. Network errors and HTTP 500, 502, 503, and 504 are retried up to three attempts. A failed request does not mark the sync completed. Repeating a sync updates the same account, post, media key, and relationship instead of inserting duplicates.

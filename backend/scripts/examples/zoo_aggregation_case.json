@@ -1,0 +1,29 @@
+[
+  {
+    "id": "rpt_3f33685c5351",
+    "ground_truth": "real",
+    "note": "Known-authentic YouTube recording Me at the zoo. One recording is not an accuracy measurement.",
+    "frames": [
+      {"timestamp_seconds": 0.0, "fake_score": 0.833976, "detector_confidence": 0.819, "face_area_ratio": 0.0283},
+      {"timestamp_seconds": 0.4096, "fake_score": 0.828668, "detector_confidence": 0.819, "face_area_ratio": 0.0284},
+      {"timestamp_seconds": 0.8192, "fake_score": 0.603908, "detector_confidence": 0.801, "face_area_ratio": 0.0278},
+      {"timestamp_seconds": 1.2288, "fake_score": 0.547542, "detector_confidence": 0.806, "face_area_ratio": 0.026},
+      {"timestamp_seconds": 1.6384, "fake_score": 0.693222, "detector_confidence": 0.823, "face_area_ratio": 0.0265},
+      {"timestamp_seconds": 2.048, "fake_score": 0.709535, "detector_confidence": 0.827, "face_area_ratio": 0.0263},
+      {"timestamp_seconds": 2.4576, "fake_score": 0.755469, "detector_confidence": 0.827, "face_area_ratio": 0.0264},
+      {"timestamp_seconds": 2.8672, "fake_score": 0.977813, "detector_confidence": 0.667, "face_area_ratio": 0.0116},
+      {"timestamp_seconds": 3.2768, "fake_score": 0.969143, "detector_confidence": 0.543, "face_area_ratio": 0.0101},
+      {"timestamp_seconds": 3.6864, "fake_score": 0.954325, "detector_confidence": 0.82, "face_area_ratio": 0.0282},
+      {"timestamp_seconds": 4.1643, "fake_score": 0.600386, "detector_confidence": 0.826, "face_area_ratio": 0.0296},
+      {"timestamp_seconds": 4.5739, "fake_score": 0.662302, "detector_confidence": 0.827, "face_area_ratio": 0.0311},
+      {"timestamp_seconds": 4.9835, "fake_score": 0.636526, "detector_confidence": 0.821, "face_area_ratio": 0.0306},
+      {"timestamp_seconds": 5.3931, "fake_score": 0.659385, "detector_confidence": 0.827, "face_area_ratio": 0.0296},
+      {"timestamp_seconds": 5.8027, "fake_score": 0.61857, "detector_confidence": 0.82, "face_area_ratio": 0.0309},
+      {"timestamp_seconds": 6.2123, "fake_score": 0.651022, "detector_confidence": 0.817, "face_area_ratio": 0.0314},
+      {"timestamp_seconds": 6.6219, "fake_score": 0.596709, "detector_confidence": 0.836, "face_area_ratio": 0.0308},
+      {"timestamp_seconds": 7.0315, "fake_score": 0.640607, "detector_confidence": 0.839, "face_area_ratio": 0.0311},
+      {"timestamp_seconds": 7.4411, "fake_score": 0.637807, "detector_confidence": 0.816, "face_area_ratio": 0.0313},
+      {"timestamp_seconds": 7.919, "fake_score": 0.635926, "detector_confidence": 0.838, "face_area_ratio": 0.0308}
+    ]
+  }
+]

@@ -27,6 +27,8 @@ dist/
 *.avi
 *.mkv
 *.zip
+*.db
+backend/data/media/
 uploads/
 artifacts/
 data/raw/

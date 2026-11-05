@@ -13,7 +13,7 @@ Updated on 2026-11-05 after the isolated CUDA environment setup. No application 
 | `pip check` in `.venv` | Exit 0. `No broken requirements found.` |
 | Global Python 3.11 | Unchanged. Still `torch 2.11.0+cpu`, CUDA unavailable. DeepGuard is not installed there. |
 | Global Python 3.13 | Unchanged. Re-checked after the `.venv` install: `torch 2.6.0+cu124`, `torch.cuda.is_available()` is `True`. |
-| DeepGuard | Not installed in `.venv` or in either global interpreter. |
+| DeepGuard | Installed in `.venv` only, version `1.1.1`. See `docs/MODEL_VALIDATION.md`. Not installed in global Python 3.11 or 3.13. |
 | FFmpeg | `ffmpeg` is not on `PATH`. |
 | Node.js | `node` v25.1.0 and `npm` 11.6.3 are on `PATH`. The frontend has not been scaffolded. |
 
@@ -78,9 +78,25 @@ The dry run would install 58 packages. The direct DeepGuard dependencies in that
 
 ## What remains
 
-- DeepGuard is not installed. The dry run is the only DeepGuard check so far.
-- The OpenCV double-install has not been checked at runtime.
-- No pretrained checkpoint has been downloaded, and no image inference has been run.
-- FFmpeg is not installed.
-- Backend and frontend directories are still empty placeholders.
-- No API, detector, graph, or UI code has been written.
+- DeepGuard 1.1.1 now runs in `.venv`. The measured sample outputs, VRAM figures, and OpenCV collision are in `docs/MODEL_VALIDATION.md`.
+- Both `opencv-python==5.0.0.93` and `opencv-python-headless==5.0.0.93` are installed. `import cv2` succeeds. The namespace collision is not resolved.
+- System FFmpeg is still not on `PATH`. OpenCV used its bundled FFmpeg DLL for the two official MP4 samples.
+- X API, YouTube context, media jobs, investigations, and the directional propagation graph are not implemented.
+
+## Member 3 integration
+
+Integrated on 2026-11-05 from `Veritas-AI.zip` into this repository. The zip's root README and team-split document were not copied over the architecture documents.
+
+The graph in `backend/app/intelligence/` is an account-similarity coordination graph. It links accounts by exact imported media hashes, TF-IDF caption similarity, shared URLs, and close posting times as a supporting signal. It does not preserve X repost, quote, or reply direction.
+
+Future task: build the directional propagation graph for `GET /api/investigations/{id}/graph` from official X `referenced_tweets`, mapped to `reposted`, `quoted`, and `replied_to`, plus one YouTube reference node when that context exists. Do not treat the current campaign graph as that graph.
+
+The campaign store writes to `backend/data/veritas.db` through `backend/app/database/`. Restarting the process keeps imported campaigns. Persistent background monitoring is not implemented.
+
+`backend/data/synthetic_demo_data.csv` is fictional. It must be labelled `synthetic_demo_data` and must not be shown as platform activity.
+
+`backend/app/main.py` is the only FastAPI application. It initializes `get_shared_detector()` in its lifespan and includes `campaigns.router`. `dev_campaign_app.py` was not copied.
+
+`frontend/extension/` is the only extension source. Generated `dist-extension` files were not copied. The root `extension/` placeholders were left empty.
+
+The imported popup still injects a reader into the active X post, YouTube page, or Instagram page when the analyst clicks Analyze. That is wider than the product rule, which allows an explicit YouTube URL read and does not allow reading X pages. The source was kept, and this mismatch is unresolved.

@@ -1,0 +1,14 @@
+# Campaign graph dependencies for the existing project virtual environment.
+# Install with D:\Hackathon\.venv\Scripts\python.exe only.
+#
+# Do not add torch, torchvision, or a CUDA wheel to this file.
+# The environment already has torch==2.14.1+cu130 and torchvision==0.29.1+cu130
+# from https://download.pytorch.org/whl/cu130. A PyPI torch pin would replace them.
+
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.9
+networkx>=3.2
+scikit-learn>=1.4
+pytest>=8.0
+httpx>=0.27
