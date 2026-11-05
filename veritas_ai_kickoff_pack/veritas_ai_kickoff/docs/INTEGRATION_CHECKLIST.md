@@ -1,3 +1,5 @@
+> **Superseded.** This file is the original kickoff snapshot. Use `docs/INTEGRATION_CHECKLIST.md` at the repository root.
+
 # Veritas AI — Integration Checklist
 
 ## Before coding

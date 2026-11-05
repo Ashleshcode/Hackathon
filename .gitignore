@@ -1,0 +1,39 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend
+node_modules/
+dist/
+
+# Local config/secrets
+.env
+.env.*
+!.env.example
+
+# Model/data/media artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.zip
+uploads/
+artifacts/
+data/raw/
+data/processed/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

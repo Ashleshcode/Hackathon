@@ -1,3 +1,5 @@
+> **Superseded.** This file is the original kickoff snapshot. Use `docs/TEAM_WORK_SPLIT.md` at the repository root. The product UI is the Chrome extension.
+
 # Veritas AI — Team Work Split
 
 **Project:** AI-Driven Detection & Countermeasures Against Fake Social Media Content  

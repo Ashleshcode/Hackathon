@@ -1,3 +1,5 @@
+> **Superseded.** This file is the original kickoff snapshot. Use the repository-root `PROJECT_CONTEXT.md`. Veritas AI is a Chrome extension, not an upload website.
+
 # Veritas AI — Project Context
 
 ## Problem statement

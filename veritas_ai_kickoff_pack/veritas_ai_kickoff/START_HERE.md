@@ -1,3 +1,5 @@
+> **Superseded.** This file is the original kickoff snapshot. Use the repository-root `README.md`, `PROJECT_CONTEXT.md`, and `docs/`. Veritas AI is a Chrome extension, not an upload website.
+
 # Veritas AI — Start Here
 
 ## 0. Add the kickoff files

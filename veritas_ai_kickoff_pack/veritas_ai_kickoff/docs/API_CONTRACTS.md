@@ -1,3 +1,5 @@
+> **Superseded.** This file is the original kickoff snapshot. Use `docs/API_CONTRACTS.md` at the repository root. The current contract is extension monitoring, not upload-first analysis.
+
 # Veritas AI — API Contracts (MVP)
 
 **Status:** Initial integration contract. Any change must be agreed by all three members before implementation.
