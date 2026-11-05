@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.database.connection import get_database_path
 from app.main import app
 from app.models.deepfake_detector import aggregate_video_scores
-from app.models.video_aggregation import POLICY_V1, POLICY_V2, aggregate_video_v2
+from app.models.video_aggregation import POLICY_V1, POLICY_V2, aggregate_video_v2, compare_v1_and_v2
 
 ZOO_FRAMES = [
     (0.0, 0.833976, 0.819, 0.0283),
@@ -82,7 +82,25 @@ def test_zoo_sequence_is_uncertain_under_v2_and_fake_under_the_old_counts():
     low_quality = [frame for frame in decision.frames if frame["timestamp_seconds"] in {2.8672, 3.2768}]
     assert [frame["quality_eligible"] for frame in low_quality] == [False, False]
     assert low_quality[0]["burst_id"] == low_quality[1]["burst_id"]
+    assert low_quality[0]["exclusion_reasons"]
+    assert low_quality[0]["aggregation_eligible"] is False
+    assert decision.evidence["excluded_frame_count"] == 2
+    assert decision.evidence["eligible_median"] < 0.8
+    assert decision.evidence["eligible_median"] != pytest.approx(decision.median)
+    assert decision.evidence["profile_pose_measured"] is False
+    assert decision.evidence["crop_blur_used_for_decision"] is False
+    assert decision.evidence["decision_explanation"].startswith("Uncertain:")
+    smallest = sorted(decision.frames, key=lambda frame: frame["face_area_ratio"])[:2]
+    assert {frame["timestamp_seconds"] for frame in smallest} == {2.8672, 3.2768}
+    assert all(frame["fake_score"] > 0.95 for frame in smallest)
+    assert any(frame["quality_eligible"] and frame["fake_score"] >= 0.9 for frame in decision.frames)
+    source = _frames(ZOO_FRAMES)
+    aggregate_video_v2(source, min_valid_frames=3)
+    assert [frame["fake_score"] for frame in source] == [row[1] for row in ZOO_FRAMES]
     assert all(frame["fake_score"] == original[1] for frame, original in zip(decision.frames, ZOO_FRAMES))
+    compared = compare_v1_and_v2(_frames(ZOO_FRAMES), min_valid_frames=3)
+    assert compared["v1"]["prediction"] == "fake"
+    assert compared["v2"]["prediction"] == "uncertain"
 
 
 def test_consistently_high_scores_are_fake_when_two_quality_bursts_exist():
@@ -160,6 +178,26 @@ def test_low_quality_detections_cannot_establish_fake():
     assert decision.evidence["eligible_burst_count"] == 0
     assert all(frame["fake_score"] == 0.95 for frame in decision.frames)
     assert all(frame["quality_warnings"] for frame in decision.frames)
+    assert "eligible_median_below_fake_minimum" in decision.evidence["rejected_reasons"]
+
+
+def test_eligible_median_alone_cannot_overturn_a_low_overall_median():
+    frames = [
+        _high(0.0, score=0.91),
+        _high(0.4, score=0.9),
+        _high(3.0, score=0.92),
+        _high(3.5, score=0.2, confidence=0.4, area=0.005),
+        _high(4.2, score=0.15, confidence=0.4, area=0.005),
+        _high(5.0, score=0.1, confidence=0.4, area=0.005),
+        _high(5.6, score=0.12, confidence=0.4, area=0.005),
+    ]
+    for frame in frames[3:]:
+        frame["prediction"] = "real"
+    decision = aggregate_video_v2(frames, min_valid_frames=3)
+    assert decision.evidence["eligible_median"] >= 0.8
+    assert decision.median < 0.8
+    assert decision.prediction == "uncertain"
+    assert "median_below_fake_minimum" in decision.evidence["rejected_reasons"]
 
 
 class _IdleDetector:

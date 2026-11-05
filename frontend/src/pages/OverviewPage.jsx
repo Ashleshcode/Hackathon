@@ -42,6 +42,13 @@ const FEATURES = [
     to: '/reports',
     icon: <path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" />,
   },
+  {
+    eyebrow: 'Dissemination',
+    title: 'Historical propagation',
+    text: 'Read a local Twitter15 or Twitter16 tree. Arrows follow the recorded parent-to-child direction.',
+    to: '/dissemination',
+    icon: <path d="M12 3v10M8 9l4 4 4-4M5 21h14" />,
+  },
 ];
 
 // Decorative network drawing. It doesn't represent any data.

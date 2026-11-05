@@ -156,3 +156,18 @@ export async function getOverview() {
   }
   return fetchOverview();
 }
+
+export async function listDisseminationCases() {
+  if (USE_MOCKS) return { cases: [] };
+  return { cases: await getJson('/api/dissemination/cases') };
+}
+
+export function getDisseminationCase(caseId) {
+  if (USE_MOCKS) return Promise.resolve(null);
+  return getJson(`/api/dissemination/cases/${encodeURIComponent(caseId)}`);
+}
+
+export function getDisseminationGraph(caseId) {
+  if (USE_MOCKS) return Promise.resolve(null);
+  return getJson(`/api/dissemination/cases/${encodeURIComponent(caseId)}/graph`);
+}

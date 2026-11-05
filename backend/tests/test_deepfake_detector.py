@@ -10,9 +10,11 @@ import torch
 from backend.app.models.deepfake_detector import (
     DeepfakeDetectorService,
     aggregate_video_scores,
+    crop_blur_variance,
     get_shared_detector,
     prediction_for_score,
 )
+from backend.app.models.video_aggregation import POLICY_V1, POLICY_V2
 
 SAMPLES = Path(r"D:\Hackathon\artifacts\deepguard-samples")
 REAL_IMAGE = SAMPLES / "western_real_1.JPG"
@@ -189,6 +191,35 @@ def test_exact_model_half_is_uncertain_not_indeterminate(tmp_path):
     assert result.status == "scored"
     assert result.prediction == "uncertain"
     assert result.fake_score == pytest.approx(0.5)
+
+
+def test_selecting_v1_keeps_the_old_decision_on_the_same_scores(tmp_path):
+    service = DeepfakeDetectorService(
+        predictor=ScriptedPredictor(TensorModel(4.0)),
+        min_valid_frames=3,
+        num_frames=4,
+    )
+    path = tmp_path / "clip.mp4"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 8, (64, 64))
+    assert writer.isOpened()
+    image = np.full((64, 64, 3), 140, dtype=np.uint8)
+    for _ in range(8):
+        assert writer.write(image)
+    writer.release()
+
+    v1 = service.analyze_video(path, aggregation_policy=POLICY_V1)
+    v2 = service.analyze_video(path, aggregation_policy=POLICY_V2)
+    assert v1.aggregation_policy == POLICY_V1
+    assert v1.prediction == "fake"
+    assert v1.fake_score == pytest.approx(float(torch.sigmoid(torch.tensor(4.0))))
+    assert [frame["fake_score"] for frame in v1.frame_results] == [frame["fake_score"] for frame in v2.frame_results]
+    assert all(frame["crop_blur"] is not None for frame in v1.frame_results)
+    assert v2.aggregation_policy == POLICY_V2
+    assert v2.prediction == "uncertain"
+    assert v2.aggregation_evidence["profile_pose_measured"] is False
+    blur = crop_blur_variance(image)
+    assert blur == pytest.approx(crop_blur_variance(image))
+    assert blur >= 0
 
 
 def test_sequential_calls_do_not_overlap_on_the_model(tmp_path):

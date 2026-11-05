@@ -4,11 +4,12 @@ V1 is the policy already stored on older reports: fake when at least two scores
 are at or above 0.8 and the median is at least 0.5. Retrieval returns that
 stored result unchanged.
 
-V2 is used for new analyses. A video is fake only when the median itself is at
-least 0.8, the high scores form at least two bursts separated by more than
-``burst_gap_seconds``, enough scored frames are quality-eligible, and a fake
-label does not rest only on low-quality detections. Real still requires every
-scored frame to be at or below 0.2. Every other case is uncertain.
+V2 is the default for new analyses and can be selected explicitly. A video is
+fake only when the median of every scored frame and the median of the
+quality-eligible frames are both at least 0.8, the high scores supply two
+pieces of temporal evidence, enough scored frames are quality-eligible, and a
+fake label does not rest only on low-quality detections. Real still requires
+every scored frame to be at or below 0.2. Every other case is uncertain.
 
 A high-scoring frame joins the previous burst when its timestamp is within
 ``burst_gap_seconds`` of that burst's previous high frame. The 8-second tab
@@ -25,9 +26,13 @@ zoo clusters last less than a second, so neither one is sustained.
 Quality uses the detector's own acceptance floors, raised by documented
 factors. With the installed defaults, a face is eligible for fake evidence
 when detector confidence is at least 0.65 (0.5 + 0.15) and the face covers at
-least 0.02 of the frame (0.01 × 2). A detection that only just clears the
-detector cannot support a fake verdict. Ineligible frames stay in the report
-with a warning.
+least 0.02 of the frame (0.01 × 2). Those floors were not fitted to one
+recording. A detection that only just clears the detector cannot support a
+fake verdict. Ineligible frames stay in the report with a warning.
+
+Crop Laplacian variance is stored when the crop exists. It is not a threshold.
+No pose or profile estimate is available, so a partial profile is not a
+separate flag.
 """
 
 from __future__ import annotations
@@ -135,6 +140,46 @@ def _burst_evidence(frames: list[dict], *, sustained_seconds: float) -> tuple[in
     return eligible, sustained, evidence
 
 
+def _center(values: list[float], *, mean: bool) -> float | None:
+    if not values:
+        return None
+    array = np.asarray(values, dtype=np.float64)
+    return float(np.mean(array) if mean else np.median(array))
+
+
+def _annotate_quality(frame: dict, *, min_confidence: float, min_area_ratio: float) -> None:
+    scored = frame.get("status") == "scored" and frame.get("fake_score") is not None
+    if not scored:
+        reason = str(frame.get("error_code") or frame.get("status") or "not_scored")
+        frame["quality_eligible"] = False
+        frame["aggregation_eligible"] = False
+        frame["quality_warnings"] = []
+        frame["quality_flags"] = [reason]
+        frame["exclusion_reasons"] = [reason]
+        frame["burst_id"] = None
+        return
+    eligible, warnings = assess_frame_quality(frame, min_confidence=min_confidence, min_area_ratio=min_area_ratio)
+    frame["quality_eligible"] = eligible
+    frame["aggregation_eligible"] = eligible
+    frame["quality_warnings"] = warnings
+    frame["quality_flags"] = list(warnings)
+    frame["exclusion_reasons"] = [] if eligible else list(warnings)
+
+
+def _decision_explanation(prediction: str | None, reasons: list[str]) -> str:
+    if prediction == "fake":
+        return (
+            "Fake: both the all-frame median and the quality-eligible median reach 0.8, "
+            "temporal evidence is at least two, enough quality-eligible frames are present, "
+            "and the high scores are not only low-quality detections."
+        )
+    if prediction == "real":
+        return "Real: every scored frame is at or below 0.2."
+    if reasons:
+        return "Uncertain: " + "; ".join(reasons) + "."
+    return "Uncertain: the scored frames are neither consistently real nor strong enough to call fake."
+
+
 def aggregate_video_v2(
     frames: list[dict],
     *,
@@ -154,14 +199,7 @@ def aggregate_video_v2(
 
     annotated = [dict(frame) for frame in frames]
     for frame in annotated:
-        eligible, warnings = assess_frame_quality(frame, min_confidence=min_confidence, min_area_ratio=min_area_ratio)
-        if frame.get("status") == "scored" and frame.get("fake_score") is not None:
-            frame["quality_eligible"] = eligible
-            frame["quality_warnings"] = warnings
-        else:
-            frame["quality_eligible"] = False
-            frame["quality_warnings"] = []
-            frame["burst_id"] = None
+        _annotate_quality(frame, min_confidence=min_confidence, min_area_ratio=min_area_ratio)
 
     burst_count = assign_high_score_bursts(annotated, high_score=high_score, gap_seconds=burst_gap_seconds)
     for frame in annotated:
@@ -169,9 +207,11 @@ def aggregate_video_v2(
 
     scored = [frame for frame in annotated if frame.get("status") == "scored" and frame.get("fake_score") is not None]
     scores = [float(frame["fake_score"]) for frame in scored]
-    median = float(np.median(np.asarray(scores, dtype=np.float64))) if scores else None
-    high_frames = [frame for frame in scored if float(frame["fake_score"]) >= high_score]
+    median = _center(scores, mean=False)
     eligible_frames = [frame for frame in scored if frame.get("quality_eligible")]
+    eligible_scores = [float(frame["fake_score"]) for frame in eligible_frames]
+    eligible_median = _center(eligible_scores, mean=False)
+    high_frames = [frame for frame in scored if float(frame["fake_score"]) >= high_score]
     eligible_bursts, sustained_bursts, evidence_count = _burst_evidence(
         annotated,
         sustained_seconds=sustained_burst_seconds,
@@ -181,6 +221,10 @@ def aggregate_video_v2(
     evidence = {
         "policy": POLICY_V2,
         "median": median,
+        "mean": _center(scores, mean=True),
+        "eligible_median": eligible_median,
+        "eligible_mean": _center(eligible_scores, mean=True),
+        "excluded_frame_count": sum(not frame.get("aggregation_eligible") for frame in annotated),
         "high_frame_count": len(high_frames),
         "high_burst_count": burst_count,
         "eligible_burst_count": eligible_bursts,
@@ -197,11 +241,15 @@ def aggregate_video_v2(
         "quality_min_confidence": min_confidence,
         "quality_min_area_ratio": min_area_ratio,
         "low_quality_only_high_scores": low_only,
+        "crop_blur_used_for_decision": False,
+        "profile_pose_measured": False,
+        "thresholds_are_calibrated_probabilities": False,
         "rejected_reasons": [],
     }
 
     if len(scored) < min_valid_frames:
         evidence["rejected_reasons"] = ["insufficient_valid_frames"]
+        evidence["decision_explanation"] = _decision_explanation("uncertain", ["insufficient_valid_frames"])
         return AggregationDecision(
             policy=POLICY_V2,
             status="indeterminate",
@@ -218,6 +266,9 @@ def aggregate_video_v2(
     if median is None or median < high_score:
         fake = False
         reasons.append("median_below_fake_minimum")
+    if eligible_median is None or eligible_median < high_score:
+        fake = False
+        reasons.append("eligible_median_below_fake_minimum")
     if evidence_count < 2:
         fake = False
         reasons.append("fewer_than_two_temporal_evidence")
@@ -235,6 +286,7 @@ def aggregate_video_v2(
     else:
         prediction = "uncertain"
     evidence["rejected_reasons"] = reasons
+    evidence["decision_explanation"] = _decision_explanation(prediction, reasons)
     return AggregationDecision(
         policy=POLICY_V2,
         status="scored",
@@ -254,10 +306,44 @@ def aggregation_method_v2(
 ) -> str:
     return (
         "video_aggregation_v2 median of scored face frames; "
-        f"fake requires a median >= {high_score}, either two high-score bursts "
-        f"separated by more than {burst_gap_seconds} seconds or one burst lasting "
-        f"more than {SUSTAINED_BURST_SECONDS} seconds, at least {min_valid_frames} "
-        "quality-eligible scored frames, and high-score evidence that is not only "
-        f"low-quality detections; real requires every scored frame <= {low_score}; "
-        "otherwise uncertain. Low-quality frames remain in the report."
+        f"fake requires that median and the quality-eligible median to be >= {high_score}, "
+        f"either two high-score bursts separated by more than {burst_gap_seconds} seconds "
+        f"or one burst lasting more than {SUSTAINED_BURST_SECONDS} seconds, at least "
+        f"{min_valid_frames} quality-eligible scored frames, and high-score evidence that "
+        f"is not only low-quality detections; real requires every scored frame <= {low_score}; "
+        "otherwise uncertain. Crop blur is recorded and is not a threshold. "
+        "Low-quality frames remain in the report."
     )
+
+
+def compare_v1_and_v2(frames: list[dict], *, min_valid_frames: int = 3) -> dict:
+    """Score the same frame rows with both policies. Does not run the model."""
+    from app.models.deepfake_detector import aggregate_video_scores
+
+    scores = [
+        float(frame["fake_score"])
+        for frame in frames
+        if frame.get("status") == "scored" and frame.get("fake_score") is not None
+    ]
+    status, prediction, median, code, message = aggregate_video_scores(scores, min_valid_frames=min_valid_frames)
+    decision = aggregate_video_v2(frames, min_valid_frames=min_valid_frames)
+    return {
+        "v1": {
+            "policy": POLICY_V1,
+            "status": status,
+            "prediction": prediction,
+            "median": median,
+            "error_code": code,
+            "error_message": message,
+        },
+        "v2": {
+            "policy": decision.policy,
+            "status": decision.status,
+            "prediction": decision.prediction,
+            "median": decision.median,
+            "eligible_median": decision.evidence.get("eligible_median"),
+            "error_code": decision.error_code,
+            "decision_explanation": decision.evidence.get("decision_explanation"),
+            "rejected_reasons": list(decision.evidence.get("rejected_reasons") or []),
+        },
+    }

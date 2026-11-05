@@ -5,6 +5,8 @@ import numpy as np
 import pytest
 
 from backend.app.models.deepfake_detector import DeepfakeDetectorService, get_shared_detector
+from backend.app.models.tta_experiment import compare_transforms
+from backend.app.models.video_aggregation import compare_v1_and_v2
 
 SAMPLES = Path(r"D:\Hackathon\artifacts\deepguard-samples")
 REAL_IMAGE = SAMPLES / "western_real_1.JPG"
@@ -55,6 +57,15 @@ def test_official_videos_keep_frame_timestamps(detector):
     high_frames = [item for item in manipulated.frame_results if item["fake_score"] >= 0.8]
     assert len(high_frames) >= 2
 
+    scores_before = [item["fake_score"] for item in authentic.frame_results]
+    real_comparison = compare_v1_and_v2(authentic.frame_results)
+    fake_comparison = compare_v1_and_v2(manipulated.frame_results)
+    assert [item["fake_score"] for item in authentic.frame_results] == scores_before
+    assert real_comparison["v1"]["prediction"] == "uncertain"
+    assert real_comparison["v2"]["prediction"] == "uncertain"
+    assert fake_comparison["v1"]["prediction"] == "fake"
+    assert fake_comparison["v2"]["prediction"] == "fake"
+
 
 def test_corrupted_video_is_invalid(detector, tmp_path):
     path = tmp_path / "broken.mp4"
@@ -103,3 +114,22 @@ def test_mixed_frames_exclude_blank_frames_from_the_score(detector, tmp_path):
     assert result.fake_score < 0.2
     assert result.frames_scored == len(scored)
     assert all(item["timestamp_seconds"] >= 0 for item in result.frame_results)
+
+
+def test_mild_transforms_stay_outside_the_production_score(detector):
+    bgr = cv2.imread(str(REAL_IMAGE))
+    assert bgr is not None
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+
+    def score(image):
+        return detector._score_rgb(image, frame_index=0, timestamp_seconds=0.0).fake_score
+
+    comparison = compare_transforms(rgb, score)
+    production = detector.analyze_image(REAL_IMAGE)
+    identity = comparison["identity_score"]
+    assert comparison["averaged_into_production"] is False
+    assert identity == pytest.approx(production.fake_score)
+    assert production.prediction == "real"
+    assert all(row["score"] is not None for row in comparison["scores"])
+    again = compare_transforms(rgb, score)
+    assert [row["score"] for row in again["scores"]] == [row["score"] for row in comparison["scores"]]

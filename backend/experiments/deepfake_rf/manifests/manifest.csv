@@ -1,0 +1,2 @@
+video_id,file_path,label,dataset_name,source_group_id,capture_condition,notes
+zoo_jawed_ma_5634abfcde7d,backend/data/media/ma_5634abfcde7d.webm,real,real_world_regression,zoo_jawed_2005,browser_tab_capture,"usage=regression_only; known-authentic Jawed Karim Me at the zoo tab recording; excluded from training, validation, threshold selection, and comparative metrics; local file is gitignored; sha256=1c7bdef9bc4e506a614a3f78cdce7d1b29146200030ee33c2012837df605516e"

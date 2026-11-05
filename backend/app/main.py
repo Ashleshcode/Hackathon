@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import analysis, campaigns, media, youtube
+from app.api import analysis, campaigns, dissemination, media, youtube
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.include_router(campaigns.router)
 app.include_router(analysis.router)
 app.include_router(media.router)
 app.include_router(youtube.router)
+app.include_router(dissemination.router)
 
 
 def _detector_status() -> dict:

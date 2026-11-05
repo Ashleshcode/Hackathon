@@ -1,0 +1,3 @@
+false:100
+non-rumor:200
+true:400

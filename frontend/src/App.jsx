@@ -3,12 +3,14 @@ import { USE_MOCKS } from './services/api.js';
 import OverviewPage from './pages/OverviewPage.jsx';
 import MediaInvestigationPage from './pages/MediaInvestigationPage.jsx';
 import CampaignAnalysisPage from './pages/CampaignAnalysisPage.jsx';
+import DisseminationPage from './pages/DisseminationPage.jsx';
 import ReportPage from './pages/ReportPage.jsx';
 
 const NAV = [
   { to: '/', label: 'Overview', end: true },
   { to: '/media', label: 'Media' },
   { to: '/campaigns', label: 'Campaigns' },
+  { to: '/dissemination', label: 'Dissemination' },
   { to: '/reports', label: 'Reports' },
 ];
 
@@ -47,6 +49,7 @@ export default function App() {
             <Route path="/" element={<OverviewPage />} />
             <Route path="/media" element={<MediaInvestigationPage />} />
             <Route path="/campaigns/:campaignId?" element={<CampaignAnalysisPage />} />
+            <Route path="/dissemination/:caseId?" element={<DisseminationPage />} />
             <Route path="/reports/:reportId?" element={<ReportPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

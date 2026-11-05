@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import uuid
 from dataclasses import dataclass
@@ -76,8 +77,12 @@ _FRAME_DETAILS = (
     "face_area_ratio",
     "crop_width",
     "crop_height",
+    "crop_blur",
     "quality_eligible",
+    "aggregation_eligible",
     "quality_warnings",
+    "quality_flags",
+    "exclusion_reasons",
     "burst_id",
 )
 
@@ -226,7 +231,21 @@ def _store_failed(
     )
 
 
-def analyze_bytes(data: bytes, *, expected: str, detector) -> dict:
+def _run_video(detector, path, aggregation_policy: str | None):
+    method = detector.analyze_video
+    policy = aggregation_policy or "video_aggregation_v2"
+    try:
+        accepted = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return method(path)
+    if "aggregation_policy" in accepted or any(
+        item.kind is inspect.Parameter.VAR_KEYWORD for item in accepted.values()
+    ):
+        return method(path, aggregation_policy=policy)
+    return method(path)
+
+
+def analyze_bytes(data: bytes, *, expected: str, detector, aggregation_policy: str | None = None) -> dict:
     if detector is None:
         raise AnalysisRejected(503, "detector_not_initialized", "The detector is not initialized.")
     limit = IMAGE_MAX_BYTES if expected == "image" else VIDEO_MAX_BYTES
@@ -263,7 +282,7 @@ def analyze_bytes(data: bytes, *, expected: str, detector) -> dict:
         if expected == "image":
             detected = detector.analyze_image(path)
         else:
-            detected = detector.analyze_video(path)
+            detected = _run_video(detector, path, aggregation_policy)
     except Exception:
         detected = DetectorResult(
             status="inference_error",

@@ -31,6 +31,7 @@ dist/
 backend/data/media/
 uploads/
 artifacts/
+backend/experiments/deepfake_rf/runs/
 data/raw/
 data/processed/
 

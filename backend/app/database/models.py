@@ -169,6 +169,49 @@ CREATE TABLE IF NOT EXISTS youtube_contexts (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS propagation_datasets (
+    id INTEGER PRIMARY KEY,
+    dataset_name TEXT NOT NULL UNIQUE,
+    source_path TEXT NOT NULL,
+    provenance_json TEXT NOT NULL,
+    imported_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS propagation_cases (
+    id INTEGER PRIMARY KEY,
+    case_id TEXT NOT NULL UNIQUE,
+    dataset_name TEXT NOT NULL,
+    source_tweet_id TEXT NOT NULL,
+    source_user_id TEXT,
+    label TEXT,
+    source_text TEXT,
+    warnings_json TEXT NOT NULL,
+    imported_at TEXT NOT NULL,
+    UNIQUE (dataset_name, source_tweet_id)
+);
+
+CREATE TABLE IF NOT EXISTS propagation_nodes (
+    id INTEGER PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES propagation_cases(case_id),
+    tweet_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    post_time_delay_minutes REAL,
+    is_root INTEGER NOT NULL,
+    UNIQUE (case_id, tweet_id)
+);
+
+CREATE TABLE IF NOT EXISTS propagation_edges (
+    id INTEGER PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES propagation_cases(case_id),
+    parent_tweet_id TEXT NOT NULL,
+    child_tweet_id TEXT NOT NULL,
+    parent_user_id TEXT NOT NULL,
+    child_user_id TEXT NOT NULL,
+    parent_delay_minutes REAL,
+    child_delay_minutes REAL,
+    UNIQUE (case_id, parent_tweet_id, child_tweet_id)
+);
+
 """
 
 INDEXES_SQL = """
@@ -185,4 +228,7 @@ CREATE INDEX IF NOT EXISTS idx_x_media_campaign ON x_media(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_post_relationships_campaign ON post_relationships(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_x_sync_runs_campaign ON x_sync_runs(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_youtube_contexts_video ON youtube_contexts(video_id);
+CREATE INDEX IF NOT EXISTS idx_propagation_cases_dataset ON propagation_cases(dataset_name);
+CREATE INDEX IF NOT EXISTS idx_propagation_nodes_case ON propagation_nodes(case_id);
+CREATE INDEX IF NOT EXISTS idx_propagation_edges_case ON propagation_edges(case_id);
 """

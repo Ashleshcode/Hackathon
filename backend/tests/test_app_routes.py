@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.api import analysis, campaigns, media, youtube
+from app.api import analysis, campaigns, dissemination, media, youtube
 from app.main import app, health
 
 
@@ -30,7 +30,8 @@ def test_campaign_router_is_registered_once():
     assert included.count(analysis.router) == 1
     assert included.count(media.router) == 1
     assert included.count(youtube.router) == 1
-    assert len(included) == 4
+    assert included.count(dissemination.router) == 1
+    assert len(included) == 5
     paths = _paths()
     assert "/health" in paths
     assert "/api/analyze/image" in paths
@@ -46,6 +47,9 @@ def test_campaign_router_is_registered_once():
     assert "/api/campaigns/{campaign_id}/check-post" in paths
     assert "/api/campaigns/{campaign_id}/sync/x" in paths
     assert "/api/campaigns/{campaign_id}/x" in paths
+    assert "/api/dissemination/cases" in paths
+    assert "/api/dissemination/cases/{case_id}" in paths
+    assert "/api/dissemination/cases/{case_id}/graph" in paths
 
 
 def test_health_reports_detector_state_and_lifespan_initializes_it_once(monkeypatch):

@@ -22,7 +22,7 @@ import torch
 
 from deepguard.data import get_test_transforms
 
-from app.models.video_aggregation import aggregation_method_v2, aggregate_video_v2
+from app.models.video_aggregation import POLICY_V1, POLICY_V2, aggregation_method_v2, aggregate_video_v2
 from app.models.video_io import inspect_video
 
 MODEL_NAME = "ms_eff_gcvit_b0"
@@ -76,6 +76,16 @@ class DetectorResult:
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def crop_blur_variance(crop: np.ndarray) -> float | None:
+    """Laplacian variance of a face crop. Diagnostic only; it does not change the score."""
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return None
+    gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY) if getattr(crop, "ndim", 0) == 3 else crop
+    if gray.size == 0:
+        return None
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
 def select_device() -> str:
@@ -205,7 +215,9 @@ class DeepfakeDetectorService:
             finding.error_message,
         )
 
-    def analyze_video(self, video_path: str | Path) -> DetectorResult:
+    def analyze_video(self, video_path: str | Path, *, aggregation_policy: str = POLICY_V2) -> DetectorResult:
+        if aggregation_policy not in {POLICY_V1, POLICY_V2}:
+            raise ValueError("aggregation_policy must be video_aggregation_v1 or video_aggregation_v2")
         started = time.perf_counter()
         path = Path(video_path)
         if not path.is_file():
@@ -231,7 +243,26 @@ class DeepfakeDetectorService:
         face_frames = [item for item in findings if item.status == "no_face"]
         errors = [item for item in findings if item.status == "inference_error"]
 
-        if scored:
+        if scored and aggregation_policy == POLICY_V1:
+            status, prediction, aggregate, error_code, error_message = aggregate_video_scores(
+                scored,
+                min_valid_frames=self.min_valid_frames,
+                high_score=self.high_score,
+                low_score=self.low_score,
+            )
+            frame_results = [item.as_dict() for item in findings]
+            policy = POLICY_V1
+            evidence = {
+                "policy": POLICY_V1,
+                "median": aggregate,
+                "scored_frame_count": len(scored),
+                "high_frame_count": sum(score >= self.high_score for score in scored),
+                "decision_explanation": (
+                    "V1 marks fake when at least two scored frames are at least 0.8 and the median is at least 0.5. "
+                    "Quality measurements do not change this rule."
+                ),
+            }
+        elif scored:
             decision = aggregate_video_v2(
                 [item.as_dict() for item in findings],
                 min_valid_frames=self.min_valid_frames,
@@ -283,14 +314,18 @@ class DeepfakeDetectorService:
             frames_scored=len(scored),
             aggregation_policy=policy,
             aggregation_evidence=evidence,
-            aggregation_method=aggregation_method_v2(
-                high_score=self.high_score,
-                low_score=self.low_score,
-                min_valid_frames=self.min_valid_frames,
-                burst_gap_seconds=1.0,
-            )
-            if policy
-            else None,
+            aggregation_method=(
+                "median of scored face frames; fake requires at least two frames >= 0.8 and a median >= 0.5"
+                if policy == POLICY_V1
+                else aggregation_method_v2(
+                    high_score=self.high_score,
+                    low_score=self.low_score,
+                    min_valid_frames=self.min_valid_frames,
+                    burst_gap_seconds=1.0,
+                )
+                if policy == POLICY_V2
+                else None
+            ),
             frame_results=frame_results,
             warnings=warnings,
         )
@@ -415,6 +450,7 @@ class DeepfakeDetectorService:
             "face_area_ratio": (face_w * face_h) / (frame_w * frame_h) if frame_w and frame_h else None,
             "crop_width": int(crop_w),
             "crop_height": int(crop_h),
+            "crop_blur": crop_blur_variance(crop),
         }
 
     def _detector_confidence(self, rgb: np.ndarray) -> float | None:
